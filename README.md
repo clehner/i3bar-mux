@@ -34,7 +34,7 @@ plain-text line-by-line stream.
 Inspired by [py3status](https://github.com/ultrabug/py3status) and
 [i3pystatus](https://github.com/enkore/i3pystatus).
 
-Much thanks to the creators of the i3 window manager and
+Much thanks to the creators of the [i3](http://i3wm.org/) window manager and
 [i3status](http://i3wm.org/i3status/).
 
 ## License
