@@ -1,0 +1,261 @@
+#!/usr/bin/env perl
+# vim:ts=4:sw=4:expandtab
+#
+# i3bar-mux
+# a tool for combining i3bar streams
+#
+# © 2013 Charles Lehner, MIT License
+#
+# i3bar-mux runs commands and combines their output into one status line
+#
+# Usage:
+#
+# Use arguments as commands.
+#	i3bar-mux [COMMAND]...
+#
+# Read commands from a config file, one command per line:
+#	i3bar-mux -c FILE
+#
+
+use strict;
+use warnings;
+use IO::Select;
+use FileHandle;
+use IPC::Open2;
+use POSIX ":sys_wait_h";
+
+# Don't buffer output
+$| = 1;
+
+# stream format states
+my $format_i3bar_start = 1;
+my $format_i3bar = 2;
+my $format_plain = 3;
+
+# string to identify the i3bar protocol
+my $i3bar_header = '{"version":1}';
+
+# pids for each running command
+my @pids;
+
+# status line for each command (by pid)
+my %status_lines;
+
+# output format for each command
+my %status_formats;
+
+# reader sockets for each command
+my %readers;
+# inverse
+my %pids_by_reader;
+
+# writer sockets for each command
+my %writers;
+
+# whether a command supports click events
+my %supports_click;
+
+# handle set for reading
+my $read_set = new IO::Select();
+
+# read events from i3bar on stdin
+$read_set->add(\*STDIN);
+
+# we can take the commands as command line arguments
+# or read them from a config file if the -c flag is used
+my $commands_file;
+if ($#ARGV > 0 and $ARGV[0] eq '-c') {
+	$commands_file = $ARGV[1];
+}
+
+open(STDERR, ">", "i3bar-mux.err");
+
+sub start_command {
+	my $command = shift;
+    my ($reader, $writer);
+    my $pid = open2($reader, $writer, $command) or die "$command: $!";
+	push @pids, $pid;
+	$readers{$pid} = $reader;
+	$writers{$pid} = $writer;
+    $pids_by_reader{$reader} = $pid;
+    $reader->autoflush(1);
+    $writer->autoflush(1);
+	$read_set->add($reader);
+	$status_lines{$pid} = '';
+    $status_lines{$pid} = '';
+}
+
+sub start_commands {
+	if ($commands_file) {
+		# read commands from file
+		open(CMD, '<', $commands_file) or die "open: $!";
+		while (<CMD>) {
+			chomp;
+			# skip comments and empty lines
+			if (/^[^#]./) {
+				start_command($_);
+			}
+		}
+		close(CMD);
+	} else {
+		# use commands from command line arguments
+		start_command($_) for (@ARGV);
+	}
+}
+
+sub stop_commands {
+    # terminate the child processes
+    #kill 'TERM', map { fileno $_  } @files;
+
+    # close file handles that we were listening on
+    foreach my $pid (@pids) {
+        my $reader = $readers{$pid};
+		if ($read_set->exists($reader)) {
+			$read_set->remove($reader);
+			$status_lines{$pid} = '';
+            delete $status_formats{$pid};
+            delete $pids_by_reader{$reader};
+            close $writers{$pid};
+            close $readers{$pid};
+            delete $readers{$pid};
+            delete $writers{$pid};
+            waitpid($pid, WNOHANG);
+            kill 'TERM', $pid;
+		}
+	}
+}
+
+# restart the commands on HUP
+$SIG{HUP} = sub {
+	stop_commands;
+	start_commands;
+};
+
+$SIG{PIPE} = sub { die "pipe broke" };
+
+sub send_event {
+    my $msg = shift;
+
+    for my $pid (@pids) {
+        if ($supports_click{$pid}) {
+            if (my $writer = $writers{$pid}) {
+                syswrite $writer, $msg . "\n";
+            }
+        }
+    }
+}
+
+sub got_json_status {
+	my ($pid, $buf) = @_;
+
+    my ($status) = ($buf =~ /^,?\[(.*)\]/);
+	$status_lines{$pid} = $status;
+}
+
+sub got_plain_status {
+	my ($pid, $buf) = @_;
+
+	# escape for json output
+	$buf =~ s/["\\]/\\\0/g;
+
+	# set the json value
+	$status_lines{$pid} = "{\"full_text\":\"$buf\"}";
+}
+
+sub got_line {
+	my ($rh, $pid, $buf) = @_;
+
+    if ($rh == \*STDIN && $buf =~ /^,?(.*)$/) {
+        my $msg = $1;
+        # pass message from i3bar to the appropriate subprocess
+        # TODO: pass only to the command that it is relevant to
+        send_event($buf);
+    }
+
+    if (!defined($pid)) {
+        return;
+    }
+
+	# get format of this stream
+	my $format = $status_formats{$pid} // 0;
+	if ($format == $format_i3bar) {
+		# pass through the json object in i3bar format
+		got_json_status($pid, $buf);
+
+	} elsif ($format == $format_i3bar_start) {
+		# this should be the opening of the infinite json array
+		if ($buf ne '[') {
+			# it seems to be a regular status line
+			got_json_status($pid, $buf);
+		}
+		$status_formats{$pid} = $format_i3bar;
+
+	} elsif ($format == $format_plain) {
+		# turn the plain text into i3bar/json
+		got_plain_status($pid, $buf);
+
+	} else {
+		# detect output format
+		if ($buf =~ /^{\s*"version":1\s*(,\s*"click_events":\s*true)?.*}$/) {
+			# got an i3bar version string
+			$format = $format_i3bar_start;
+            if ($1) {
+                # supports click events
+                $supports_click{$pid} = 1;
+            }
+		} else {
+			# got a regular string
+			$format = $format_plain;
+			got_plain_status($pid, $buf);
+		}
+		$status_formats{$pid} = $format;
+	}
+
+}
+
+# start the commands
+start_commands;
+
+# print the i3bar protocol header
+print "{\"version\":1,\"click_events\":true}\n";
+
+# start printing the infinite json array
+print "[\n";
+
+# get each handle with data
+while ($read_set->count gt 0) {
+	foreach my $rh ($read_set->can_read) {
+        my $pid = $pids_by_reader{$rh};
+		my $buf;
+		if (sysread($rh, $buf, 1024)) {
+			chomp $buf;
+
+			# manually split the buf into lines
+			# because <> does buffering
+			got_line($rh, $pid, $_) for split("\n", $buf);
+
+		} else {
+			# file handle closed
+			$read_set->remove($rh);
+
+            if ($rh == \*STDIN) {
+                stop_commands;
+            }
+
+            if (defined $pid) {
+                $status_lines{$pid} = '';
+                delete $status_formats{$pid};
+            }
+		}
+	}
+
+	# generate the combined status line
+	# excluding empty statuses
+	my @statuses = grep { $_ } map { $status_lines{$_} } @pids;
+
+	# print the status line
+	print "[" . join(",", @statuses) . "],\n";
+}
+
+# end the infinite array
+print "]\n";
