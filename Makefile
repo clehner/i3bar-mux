@@ -13,7 +13,7 @@ install:
 	install -m 0755 -t ${LIBDIR} ${commands}
 
 uninstall:
-	rm -f ${BINDIR}/i3bar-mux
+	rm -f ${BINDIR}/${bin}
 	for prog in ${commands}; do \
 		rm -f ${LIBDIR}/$$prog; \
 	done
