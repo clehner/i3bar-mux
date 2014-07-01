@@ -63,12 +63,10 @@ while (<STDIN>) {
 		my $button = $1;
 		if ($button == 1) {
 			toggle_cal;
-		} elsif ($button == 2) {
+		} elsif ($button == 2 || $button == 4) {
 			prev_month;
-		} elsif ($button == 3) {
+		} elsif ($button == 3 || $button == 5) {
 			next_month;
-		} else {
-			print "button $button\n";
 		}
 	}
 }
