@@ -10,7 +10,7 @@ all:
 install:
 	mkdir -p ${BINDIR} ${LIBDIR}
 	install -m 0755 ${bin} ${BINDIR}
-	install -m 0755 -t ${LIBDIR} ${commands}
+	install -m 0755 -t ${LIBDIR} ${commands:%=bin/%}
 
 uninstall:
 	rm -f ${BINDIR}/${bin}
