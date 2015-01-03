@@ -9,7 +9,7 @@
 use strict;
 use warnings;
 use IO::Select;
-use IO::Socket::INET;
+use IO::Socket::INET6;
 
 if ($#ARGV < 1) {
     print STDERR "Usage: $0 hostname port [timeout]\n";
@@ -32,7 +32,7 @@ my $socket;
 my $timeout = $idle_timeout;
 
 sub connect_sock {
-    $socket = new IO::Socket::INET(
+    $socket = new IO::Socket::INET6(
         PeerAddr => $host,
         PeerPort => $port,
         Proto    => 'tcp',
