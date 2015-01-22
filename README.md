@@ -29,13 +29,16 @@ through click events from i3bar to the commands as well, if they support it. The
 output format of the commands is expected to be either i3bar format or a
 plain-text line-by-line stream.
 
-## Credits
+## Credits & Links
 
 Inspired by [py3status](https://github.com/ultrabug/py3status) and
 [i3pystatus](https://github.com/enkore/i3pystatus).
 
 Much thanks to the creators of the [i3](http://i3wm.org/) window manager and
 [i3status](http://i3wm.org/i3status/).
+
+See also [i3cat](https://vincent-petithory.github.io/i3cat/) which implements a
+similar idea as i3bar-mux, in Go, with more features.
 
 ## License
 
