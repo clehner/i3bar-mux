@@ -17,8 +17,11 @@ my %status_colors = (
 );
 
 my $track;
+my $text;
 my $status;
 my $color;
+my $show_time = 0;
+my $timeout;
 
 sub read_status {
 	if (scalar @_ < 3 or $_[1] =~ /^ERROR/) {
@@ -28,8 +31,10 @@ sub read_status {
 		return;
 	}
 
-	if ($_[1] =~ /^\[([^\]]*)\]/) {
+	my $time = '';
+	if ($_[1] =~ /^\[([^\]]*)\]\s*\S*\s*(\S*)/) {
 		$status = $1;
+		$time = $2;
 	} else {
 		$status = 'unknown';
 	}
@@ -38,16 +43,28 @@ sub read_status {
 	$track =~ s|"|\"|g;
 	$track =~ s|\s*$||;
 	$color = $status_colors{$status} // $status_colors{'unknown'};
+
+	$text = $track;
+	if ($show_time) {
+		use utf8;
+		$show_time = 0;
+		$timeout = 2;
+		my $time_str = "…[$time]";
+		$text = substr($text, 0, -length($time_str)) . $time_str;
+	} else {
+		$timeout = undef;
+	}
 }
 
 sub print_status {
 	if (!$status) {
 		read_status(`mpc status`);
 	}
-	print "[{\"name\":\"$status_name\",\"color\":\"$color\",\"full_text\":\"$track\"}],\n";
+	print "[{\"name\":\"$status_name\",\"color\":\"$color\",\"full_text\":\"$text\"}],\n";
 }
 
 sub clicked_button {
+	$show_time = 1;
 	if ($1 == 1) { # left click
 		read_status(`mpc toggle`);
 	} elsif ($1 == 2) { # right click
@@ -59,6 +76,7 @@ sub clicked_button {
 	} elsif ($1 == 5) { # scroll down
 		read_status(`mpc seek +1`);
 	}
+	$show_time = 1;
 }
 
 # Don't buffer output
@@ -75,7 +93,7 @@ print_status;
 
 while ($read_set->count gt 0) {
 	$status = "";
-	foreach my $rh ($read_set->can_read) {
+	foreach my $rh ($read_set->can_read($timeout)) {
 		$_ = <$rh>;
 		if ($rh == \*STDIN) {
 			if ($_) {
