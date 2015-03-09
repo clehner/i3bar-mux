@@ -21,9 +21,9 @@ my $status;
 my $color;
 
 sub read_status {
-	if ($_[1] =~ /^ERROR/) {
+	if (scalar @_ < 3 or $_[1] =~ /^ERROR/) {
 		$status = 'unknown';
-		$track = '';
+		$track = '♫';
 		$color = $status_colors{'unknown'};
 		return;
 	}
@@ -47,6 +47,20 @@ sub print_status {
 	print "[{\"name\":\"$status_name\",\"color\":\"$color\",\"full_text\":\"$track\"}],\n";
 }
 
+sub clicked_button {
+	if ($1 == 1) { # left click
+		read_status(`mpc toggle`);
+	} elsif ($1 == 2) { # right click
+		read_status(`mpc next`);
+	} elsif ($1 == 3) { # middle click
+		read_status(`mpc prev`);
+	} elsif ($1 == 4) { # scroll up
+		read_status(`mpc seek -1`);
+	} elsif ($1 == 5) { # scroll down
+		read_status(`mpc seek +1`);
+	}
+}
+
 # Don't buffer output
 $| = 1;
 
@@ -66,18 +80,7 @@ while ($read_set->count gt 0) {
 		if ($rh == \*STDIN) {
 			if ($_) {
 				if (/"name":"$status_name"/ and /"button":([0-9])/) {
-					my $button = $1;
-					if ($button == 1) {
-						read_status(`mpc toggle --wait`);
-					} elsif ($button == 2) {
-						read_status(`mpc next`);
-					} elsif ($button == 3) {
-						read_status(`mpc prev`);
-					} elsif ($button == 4) {
-						read_status(`mpc seek -1`);
-					} elsif ($button == 5) {
-						read_status(`mpc seek +1`);
-					}
+					clicked_button($1);
 				}
 			} else {
 				# stdin closed
