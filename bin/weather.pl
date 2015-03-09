@@ -67,9 +67,10 @@ sub forecast {
 	}
 	#print "[{\"name\":\"weather\",\"full_text\":\"$line\"}],\n";
 	print $line . "\n";
+	alarm $interval;
 }
 
-while(1) {
-	forecast;
-	sleep $interval;
-}
+$SIG{ALRM} = \&forecast;
+
+forecast;
+while (<STDIN>) {}
