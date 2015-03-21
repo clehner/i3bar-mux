@@ -16,44 +16,34 @@ my %status_colors = (
 	unknown => '#FFFF00'
 );
 
-my $track;
-my $text;
+my $idle_pid;
+my $track_num;
+my $text = "";
 my $status;
 my $color;
-my $show_time = 0;
-my $timeout;
 
 sub read_status {
 	if (scalar @_ < 3 or $_[1] =~ /^ERROR/) {
 		$status = 'unknown';
-		$track = '♫';
+		$track_num = '♫';
 		$color = $status_colors{'unknown'};
 		return;
 	}
 
 	my $time = '';
-	if ($_[1] =~ /^\[([^\]]*)\]\s*\S*\s*(\S*)/) {
+	my $duration = '';
+	if ($_[1] =~ /^\[([^\]]*)\]\s*(\S*)\s*(\S*)\/(\S*)/) {
 		$status = $1;
-		$time = $2;
+		$track_num = $2;
+		$time = $3;
+		$duration = $4;
 	} else {
 		$status = 'unknown';
 	}
-	$track = $_[0];
-	$track =~ s|/|//|g;
-	$track =~ s|"|\"|g;
-	$track =~ s|\s*$||;
 	$color = $status_colors{$status} // $status_colors{'unknown'};
 
-	$text = $track;
-	if ($show_time) {
-		use utf8;
-		$show_time = 0;
-		$timeout = 2;
-		my $time_str = "…[$time]";
-		$text = substr($text, 0, -length($time_str)) . $time_str;
-	} else {
-		$timeout = undef;
-	}
+	$text = ''.$track_num.' '.
+		'<span foreground=\"#33ff99\">'.$time.'</span>';
 }
 
 sub print_status {
@@ -63,52 +53,58 @@ sub print_status {
 	print "[{\"name\":\"$status_name\",\"color\":\"$color\",\"full_text\":\"$text\"}],\n";
 }
 
+sub restart {
+	kill TERM => $idle_pid;
+	exec $0, '--continue';
+}
+
+sub quit_all {
+	kill TERM => $idle_pid;
+	exit 0;
+}
+
 sub clicked_button {
-	$show_time = 1;
 	if ($1 == 1) { # left click
 		read_status(`mpc toggle`);
-	} elsif ($1 == 2) { # right click
-		read_status(`mpc next`);
-	} elsif ($1 == 3) { # middle click
+	} elsif ($1 == 2) { # middle click
 		read_status(`mpc prev`);
+	} elsif ($1 == 3) { # right click
+		read_status(`mpc next`);
 	} elsif ($1 == 4) { # scroll up
 		read_status(`mpc seek -1`);
 	} elsif ($1 == 5) { # scroll down
 		read_status(`mpc seek +1`);
 	}
-	$show_time = 1;
 }
 
 # Don't buffer output
 $| = 1;
 
-my $idle_pid = open IDLE, 'mpc idleloop|'
+$idle_pid = open IDLE, 'mpc idleloop|'
 	or die "open mpc idleloop: $!";
 $read_set->add(\*IDLE);
 
-print "{\"version\":1, \"click_events\":true}\n";
-print "[\n";
+binmode(STDOUT, ":utf8");
+
+$SIG{TERM} = \&quit_all;
+$SIG{HUP} = \&restart;
+
+if (scalar @ARGV < 1 || $ARGV[0] ne '--continue') {
+	print "{\"version\":1, \"click_events\":true}\n";
+	print "[\n";
+}
 
 print_status;
 
-while ($read_set->count gt 0) {
+outer: while ($read_set->count gt 0) {
+	my $timeout = ($status eq "playing") ? 1 : 3600;
 	$status = "";
 	foreach my $rh ($read_set->can_read($timeout)) {
-		$_ = <$rh>;
+		defined($_ = <$rh>) or quit_all;
 		if ($rh == \*STDIN) {
-			if ($_) {
-				if (/"name":"$status_name"/ and /"button":([0-9])/) {
-					clicked_button($1);
-				}
-			} else {
-				# stdin closed
-				kill TERM => $idle_pid;
-				exit 0;
-			}
-		} elsif ($rh == \*IDLE) {
-			if (!$_) {
-				# mpc exited
-				exit 1;
+			if (/"name":"$status_name"/ and /"button":([0-9])/) {
+				clicked_button($1);
+				next outer;
 			}
 		}
 	}
