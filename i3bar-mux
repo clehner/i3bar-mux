@@ -72,17 +72,17 @@ open(STDERR, ">", "i3bar-mux.err");
 
 sub start_command {
 	my $command = shift;
-    my ($reader, $writer);
-    my $pid = open2($reader, $writer, $command) or die "$command: $!";
+	my ($reader, $writer);
+	my $pid = open2($reader, $writer, $command) or die "$command: $!";
 	push @pids, $pid;
 	$readers{$pid} = $reader;
 	$writers{$pid} = $writer;
-    $pids_by_reader{$reader} = $pid;
-    $reader->autoflush(1);
-    $writer->autoflush(1);
+	$pids_by_reader{$reader} = $pid;
+	$reader->autoflush(1);
+	$writer->autoflush(1);
 	$read_set->add($reader);
 	$status_lines{$pid} = '';
-    $status_lines{$pid} = '';
+	$status_lines{$pid} = '';
 }
 
 sub start_commands {
@@ -104,23 +104,23 @@ sub start_commands {
 }
 
 sub stop_commands {
-    # terminate the child processes
-    #kill 'TERM', map { fileno $_  } @files;
+	# terminate the child processes
+	#kill 'TERM', map { fileno $_  } @files;
 
-    # close file handles that we were listening on
-    foreach my $pid (@pids) {
-        my $reader = $readers{$pid};
+	# close file handles that we were listening on
+	foreach my $pid (@pids) {
+		my $reader = $readers{$pid};
 		if ($read_set->exists($reader)) {
 			$read_set->remove($reader);
 			$status_lines{$pid} = '';
-            delete $status_formats{$pid};
-            delete $pids_by_reader{$reader};
-            close $writers{$pid};
-            close $readers{$pid};
-            delete $readers{$pid};
-            delete $writers{$pid};
-            waitpid($pid, WNOHANG);
-            kill 'TERM', $pid;
+			delete $status_formats{$pid};
+			delete $pids_by_reader{$reader};
+			close $writers{$pid};
+			close $readers{$pid};
+			delete $readers{$pid};
+			delete $writers{$pid};
+			waitpid($pid, WNOHANG);
+			kill 'TERM', $pid;
 		}
 	}
 }
@@ -136,21 +136,21 @@ $SIG{PIPE} = sub { die "pipe broke" };
 $SIG{CHLD} = 'IGNORE';
 
 sub send_event {
-    my $msg = shift;
+	my $msg = shift;
 
-    for my $pid (@pids) {
-        if ($supports_click{$pid}) {
-            if (my $writer = $writers{$pid}) {
-                syswrite $writer, $msg . "\n";
-            }
-        }
-    }
+	for my $pid (@pids) {
+		if ($supports_click{$pid}) {
+			if (my $writer = $writers{$pid}) {
+				syswrite $writer, $msg . "\n";
+			}
+		}
+	}
 }
 
 sub got_json_status {
 	my ($pid, $buf) = @_;
 
-    my ($status) = ($buf =~ /^,?\[(.*)\]/);
+	my ($status) = ($buf =~ /^,?\[(.*)\]/);
 	$status_lines{$pid} = $status;
 }
 
@@ -167,16 +167,16 @@ sub got_plain_status {
 sub got_line {
 	my ($rh, $pid, $buf) = @_;
 
-    if ($rh == \*STDIN && $buf =~ /^,?(.*)$/) {
-        my $msg = $1;
-        # pass message from i3bar to the appropriate subprocess
-        # TODO: pass only to the command that it is relevant to
-        send_event($buf);
-    }
+	if ($rh == \*STDIN && $buf =~ /^,?(.*)$/) {
+		my $msg = $1;
+		# pass message from i3bar to the appropriate subprocess
+		# TODO: pass only to the command that it is relevant to
+		send_event($buf);
+	}
 
-    if (!defined($pid)) {
-        return;
-    }
+	if (!defined($pid)) {
+		return;
+	}
 
 	# get format of this stream
 	my $format = $status_formats{$pid} // 0;
@@ -201,10 +201,10 @@ sub got_line {
 		if ($buf =~ /^{\s*"version":1\s*(,\s*"click_events":\s*true)?.*}$/) {
 			# got an i3bar version string
 			$format = $format_i3bar_start;
-            if ($1) {
-                # supports click events
-                $supports_click{$pid} = 1;
-            }
+			if ($1) {
+				# supports click events
+				$supports_click{$pid} = 1;
+			}
 		} else {
 			# got a regular string
 			$format = $format_plain;
@@ -227,7 +227,7 @@ print "[\n";
 # get each handle with data
 while ($read_set->count gt 0) {
 	foreach my $rh ($read_set->can_read) {
-        my $pid = $pids_by_reader{$rh};
+		my $pid = $pids_by_reader{$rh};
 		my $buf;
 		if (sysread($rh, $buf, 1024)) {
 			chomp $buf;
@@ -240,14 +240,14 @@ while ($read_set->count gt 0) {
 			# file handle closed
 			$read_set->remove($rh);
 
-            if ($rh == \*STDIN) {
-                stop_commands;
-            }
+			if ($rh == \*STDIN) {
+				stop_commands;
+			}
 
-            if (defined $pid) {
-                $status_lines{$pid} = '';
-                delete $status_formats{$pid};
-            }
+			if (defined $pid) {
+				$status_lines{$pid} = '';
+				delete $status_formats{$pid};
+			}
 		}
 	}
 
