@@ -21,6 +21,7 @@ my $track_num;
 my $text = "";
 my $status;
 my $color;
+my $show_time = 0;
 
 sub read_status {
 	if (scalar @_ < 3 or $_[1] =~ /^ERROR/) {
@@ -42,8 +43,10 @@ sub read_status {
 	}
 	$color = $status_colors{$status} // $status_colors{'unknown'};
 
-	$text = ''.$track_num.' '.
-		'<span foreground=\"#33ff99\">'.$time.'</span>';
+	$text = ''.$track_num;
+	if ($show_time) {
+		$text .= ' <span foreground=\"#33ff99\">'.$time.'</span>';
+	}
 }
 
 sub print_status {
@@ -67,7 +70,8 @@ sub clicked_button {
 	if ($1 == 1) { # left click
 		read_status(`mpc toggle`);
 	} elsif ($1 == 2) { # middle click
-		read_status(`mpc prev`);
+		restart;
+		#read_status(`mpc prev`);
 	} elsif ($1 == 3) { # right click
 		read_status(`mpc next`);
 	} elsif ($1 == 4) { # scroll up
@@ -97,7 +101,7 @@ if (scalar @ARGV < 1 || $ARGV[0] ne '--continue') {
 print_status;
 
 outer: while ($read_set->count gt 0) {
-	my $timeout = ($status eq "playing") ? 1 : 3600;
+	my $timeout = ($status eq "playing" and $show_time) ? 1 : 3600;
 	$status = "";
 	foreach my $rh ($read_set->can_read($timeout)) {
 		defined($_ = <$rh>) or quit_all;

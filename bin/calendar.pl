@@ -14,7 +14,7 @@ my $interval = +$ARGV[0] || 1;
 $| = 1;
 
 sub print_date {
-	my $time = strftime("%Y-%m-%d %H:%M:%S", localtime(time()));
+	my $time = strftime("%a %m-%d %H:%M:%S", localtime(time()));
 	print "[{\"name\":\"calendar\",\"full_text\":\"$time\"}],\n";
 	alarm $interval;
 }
